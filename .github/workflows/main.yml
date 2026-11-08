@@ -1,0 +1,73 @@
+
+name: Build Shadow Client (Windows x64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "src/**"
+      - ".github/workflows/build-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Standalone Windows Client
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore src/ShadowClient/ShadowClient.csproj
+
+      - name: Build standalone EXE
+        shell: pwsh
+        run: |
+          dotnet publish src/ShadowClient/ShadowClient.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output publish `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "BUILD FAILED"
+          }
+
+          if (!(Test-Path "publish/ShadowClient.exe")) {
+            throw "EXE NOT FOUND"
+          }
+
+      - name: Package distributable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "publish/*" `
+            -DestinationPath "ShadowClient-Windows-x64.zip" `
+            -Force
+
+      - name: Upload EXE and ZIP artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShadowClient-Windows-x64
+          path: |
+            publish/ShadowClient.exe
+            ShadowClient-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
